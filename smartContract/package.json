@@ -1,0 +1,22 @@
+{
+  "name": "hardhat-project",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy:op": "hardhat deploy --network optimism-sepolia-testnet",
+    "deploy:avax": "hardhat deploy --network avalanche-fuji-testnet",
+    "deploy:arb": "hardhat deploy --network arbitrum-sepolia-testnet",
+    "deploy:all": "npm run deploy:op && npm run deploy:avax && npm run deploy:arb",
+    "set-peers:op": "hardhat run scripts/setPeers.js --network optimism-sepolia-testnet",
+    "set-peers:avax": "hardhat run scripts/setPeers.js --network avalanche-fuji-testnet",
+    "set-peers:arb": "hardhat run scripts/setPeers.js --network arbitrum-sepolia-testnet"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.0.0",
+    "hardhat": "^2.25.0",
+    "hardhat-deploy": "^0.12.4"
+  },
+  "dependencies": {
+    "@chainlink/contracts": "^1.4.0",
+    "@openzeppelin/contracts": "^5.3.0"
+  }
+}

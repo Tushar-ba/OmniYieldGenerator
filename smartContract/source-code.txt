@@ -1,0 +1,59 @@
+const chain = args[0]
+const project = args[1]  
+const symbol = args[2] 
+
+const url = `https://omniyieldgenerator.onrender.com/pools/${chain}/${project}/${symbol}`
+
+console.log('Testing URL:', url)
+console.log('Parameters:', { chain, project, symbol })
+
+try {
+  const apiResponse = await Functions.makeHttpRequest({
+    url: url,
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    }
+  })
+
+  console.log('Response status:', apiResponse.status)
+  console.log('Response data:', JSON.stringify(apiResponse.data, null, 2))
+
+  if (apiResponse.error) {
+    console.error('API Error:', apiResponse.error)
+    return Functions.encodeString("ERROR")
+  }
+
+  if (!apiResponse.data || !apiResponse.data.success) {
+    console.error('No successful data received')
+    return Functions.encodeString("NO_DATA")
+  }
+
+  const data = apiResponse.data.data
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    console.error('Invalid data structure')
+    return Functions.encodeString("INVALID_DATA")
+  }
+
+  const poolData = data[0]
+  const apy = poolData.apy
+  // Convert APY to whole number by multiplying by 100 and rounding
+  const num = Math.round(Number(apy) * 100)
+
+  if (apy === null || apy === undefined) {
+    console.error('APY is null or undefined')
+    return Functions.encodeString("NO_APY")
+  }
+
+  console.log('Extracted APY:', num)
+  
+  // Return APY as string of whole number
+  console.log('Returning APY string:', num.toString())
+  
+  return Functions.encodeUint256(num)
+
+} catch (error) {
+  console.error('Caught error:', error)
+  return Functions.encodeString("EXCEPTION")
+}

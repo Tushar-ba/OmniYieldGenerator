@@ -197,7 +197,15 @@ async fn fetch_all_pools() -> Result<Vec<Pool>, ApiError> {
 async fn main() -> std::io::Result<()> {
     env_logger::init();
     
-    println!("Starting DeFi Yields API server on http://127.0.0.1:8080");
+    // Get port from environment variable or default to 8080
+    let port = std::env::var("PORT")
+        .unwrap_or_else(|_| "8080".to_string())
+        .parse::<u16>()
+        .unwrap_or(8080);
+    
+    let bind_address = format!("0.0.0.0:{}", port);
+    
+    println!("Starting DeFi Yields API server on {}", bind_address);
     
     HttpServer::new(|| {
         App::new()
@@ -205,7 +213,7 @@ async fn main() -> std::io::Result<()> {
             .service(get_all_pools)
             .service(get_filtered_pools)
     })
-    .bind("127.0.0.1:8080")?
+    .bind(&bind_address)?
     .run()
     .await
 }

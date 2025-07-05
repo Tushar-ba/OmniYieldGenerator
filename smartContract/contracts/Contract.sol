@@ -17,29 +17,42 @@ contract Contract is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentra
     uint256 public subscriptionId;
     uint256 public gasLimit;
     address public donId;
+    uint256 public currentDepositId;
 
     
 
-    struct APYData {
+    struct APYDataAave {
         uint256 chainId;
         uint256 aave;
-        uint256 compound;
+        uint256 timestamp;
+    }
+
+    struct APYDataUniswap {
+        uint256 chainId;
         uint256 uniswap;
+        uint256 timestamp;
+    }
+
+    struct APYDataCompound {
+        uint256 chainId;
+        uint256 compound;
         uint256 timestamp;
     }
 
 
     struct Deposit {
         uint256 amount;
-        uint256 yield;
         uint256 depositeTime;
-        string protocol;
+        string project;
         string symbol;
         string chain;
         uint256 apy;
-    }
+        uint256 depositId;
+    }   
 
-    mapping(uint256 => APYData[]) public apyData;
+    mapping(uint256 => APYDataAave) public apyDataAave;
+    mapping(uint256 => APYDataUniswap) public apyDataUniswap;
+    mapping(uint256 => APYDataCompound) public apyDataCompound;
 
     string public constant SOURCE_CODE = 
     "const chain = args[0] || 'Ethereum';"
@@ -87,7 +100,7 @@ contract Contract is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentra
     "  return Functions.encodeString('EXCEPTION');"
     "}";
 
-    mapping(address => Deposit) public deposits;
+    mapping(address => mapping(uint256 => Deposit)) public deposits;
 
 
     event Deposit(address indexed user, uint256 amount, string protocol, uint256 chainId);
@@ -96,6 +109,7 @@ contract Contract is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentra
     error InvalidSender();
     error InvalidProtocol();
     error InvalidChainId();
+    error InvalidDepositId();
 
     function initialize( address _USDC, address _LpToken) public initializer {
         __Ownable_init(msg.sender);
@@ -104,37 +118,41 @@ contract Contract is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentra
         LpToken = _LpToken;
     }
 
-    function deposite(uint256 _amount, string memory _protocol, string memory _symbol, string memory _chain, uint256 _chainId) public {
+    function deposite(uint256 _amount, string memory _project, string memory _symbol, string memory _chain, uint256 _chainId) public {
         if(_amount <= 0) revert InvalidAmount();
         if(msg.sender == address(0)) revert InvalidSender();
-        if(bytes(_protocol).length == 0) revert InvalidProtocol();
+        if(bytes(_project).length == 0) revert InvalidProtocol();
         if(_chainId == 0) revert InvalidChainId();
-        
-        uint256 apy = getAPY(_chainId, _protocol, _symbol);
+
+        uint256 depositId = currentDepositId++;
+
+        uint256 apy = chooseProject(_project);
         if(apy == 0) revert InvalidAPY();
 
         Deposit memory deposit = Deposit({
             amount: _amount,
-            yield: 0,
             depositeTime: block.timestamp,
-            protocol: _protocol,
+            project: _project,
             apy: apy,
             symbol: _symbol,
-            chain: _chain
+            chain: _chain,
+            depositId: depositId
         });
 
         IERC20(USDC).transferFrom(msg.sender, address(this), _amount);
         IERC20(LpToken).mint(msg.sender, _amount);
-        emit Deposit(msg.sender, _amount, _protocol, _chainId);
+        emit Deposit(msg.sender, _amount, _project, _chainId, depositId);
     }
 
-    function withdraw(uint256 _amount) public {
+    function withdraw(uint256 _amount, uint256 _depositId) public {
+        if(_depositId == 0) revert InvalidDepositId();
+        if(deposits[msg.sender][_depositId].amount == 0) revert InvalidDepositId();
+        if(deposits[msg.sender][_depositId].amount < _amount) revert InvalidAmount();
         if(_amount <= 0) revert InvalidAmount();
         if(msg.sender == address(0)) revert InvalidSender();
-        if(deposits[msg.sender].amount < _amount) revert InvalidAmount();
 
         IERC20(LpToken).transferFrom(msg.sender, address(this), _amount);
-        uint256 yieldAmount = _amount * deposits[msg.sender].apy / 10000;
+        uint256 yieldAmount = _amount * deposits[msg.sender][_depositId].apy / 10000;
         IERC20(USDC).approve(msg.sender, yieldAmount);
         IERC20(USDC).transfer(msg.sender, yieldAmount);
         emit Withdraw(msg.sender, _amount, yieldAmount);
@@ -151,11 +169,46 @@ contract Contract is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reentra
         req.setArgs(args);
 
         bytes32 requestId = _sendRequest(req.encodeCBOR(), subscriptionId, gasLimit, donId);
+        updateAPY(requestId, _chain, _project);
 
-        return requestId;        
+        emit APYUpdated(requestId, _chain, _project);
+
+        return requestId;
     }
 
-    function updateAPY(bytes32 _requestId) public {
+    function updateAPY(bytes32 _requestIda, string memory _chainId, string memory _project) public {
+        if(string.length(_chainId) == 0) revert InvalidChainId();
+        if(bytes(_data).length == 0) revert InvalidData();
+        if(_project == "aave-v3") {
+            APYDataAave memory apyData = APYDataAave({
+                chainId: _chainId,
+                aave: _data,
+                timestamp: block.timestamp
+            });
+        } else if(_project == "uniswap") {
+            APYDataUniswap memory apyData = APYDataUniswap({
+                chainId: _chainId,
+                uniswap: _data,
+                timestamp: block.timestamp
+            });
+        } else {
+            APYDataCompound memory apyData = APYDataCompound({
+                chainId: _chainId,
+                compound: _data,
+                timestamp: block.timestamp
+            });
+        }
+    }
+
+    function chooseProject(string memory _project) internal view returns (uint256) {
+        if(_project == "aave-v3") {
+            return apyDataAave.aave;
+        } else if(_project == "uniswap") {
+            return apyDataUniswap.uniswap;
+        } else if(_project == "compound") {
+            return apyDataCompound.compound;
+        }
+    }
 
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
